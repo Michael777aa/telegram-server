@@ -84,15 +84,26 @@ app.get("/api/status", (req, res) => {
   });
 });
 
-// ========== YOUR EXISTING ROUTES ==========
-// Auth routes (public)
-app.use("/api/user", authRouter);
-
-// Protector middleware for protected routes
-app.use("/api/*", (req, res, next) => {
+// ========== AUTH MIDDLEWARE ==========
+// Define auth middleware FIRST
+const authMiddleware = (req, res, next) => {
   // Skip protection for public routes
-  const publicRoutes = ["/api/test", "/api/health", "/api/public", "/api/status"];
-  if (publicRoutes.includes(req.originalUrl.split('?')[0])) {
+  const publicRoutes = [
+    "/api/test", 
+    "/api/health", 
+    "/api/public", 
+    "/api/status",
+    "/api/user/login",
+    "/api/user/register",
+    "/api/user/logout"
+  ];
+  
+  const currentRoute = req.originalUrl.split('?')[0];
+  
+  // Check if current route is in publicRoutes
+  const isPublicRoute = publicRoutes.some(route => currentRoute.startsWith(route));
+  
+  if (isPublicRoute) {
     return next();
   }
   
@@ -100,9 +111,16 @@ app.use("/api/*", (req, res, next) => {
     return next(new ReqError(401, "Authentication required. Please log in."));
   }
   next();
-});
+};
 
-// Protected routes
+// ========== YOUR EXISTING ROUTES ==========
+// Auth routes (public) - should come BEFORE auth middleware
+app.use("/api/user", authRouter);
+
+// Apply auth middleware to everything else
+app.use(authMiddleware);
+
+// Protected routes (require authentication)
 app.use("/api/contacts", contactsRouter);
 app.use("/api/profile", profileRouter);
 app.use("/api/chatRoom", chatRoomRouter);
