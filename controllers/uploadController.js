@@ -7,7 +7,7 @@ module.exports = catchAsyncError(async (req, res, next) => {
 
   const uploadData = await cloudinary.uploader
     .upload(fileBase64, {
-      upload_preset: "telegram_preset",
+      upload_preset: "telegram_clone",
       resource_type: req.body.fileType,
       width: 400,
       height: 400,
