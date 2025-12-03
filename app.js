@@ -11,6 +11,7 @@ const uploadRouter = require("./routers/uploadRouter");
 const ReqError = require("./utilities/ReqError");
 const errorController = require("./controllers/errorController");
 
+// Middleware
 app.use(express.json({ limit: "50mb" }));
 app.use(cookieParser());
 app.use(cors({
@@ -18,115 +19,84 @@ app.use(cors({
   credentials: true,
 }));
 
-// ========== ADDED TEST ROUTES ==========
-// Public test route - no authentication required
+// ========== DEBUG MIDDLEWARE ==========
+app.use((req, res, next) => {
+  console.log(`🔍 [${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  console.log('📦 Cookies:', req.cookies);
+  next();
+});
+
+// ========== PUBLIC ROUTES ==========
+// Test endpoints
 app.get("/", (req, res) => {
-  res.json({
-    message: "Telegram Clone API is running 🚀",
-    timestamp: new Date().toISOString(),
-    endpoints: {
-      test: "/api/test",
-      health: "/api/health",
-      public: "/api/public",
-      status: "/api/status",
-      user: "/api/user",
-      contacts: "/api/contacts",
-      profile: "/api/profile",
-      chatRoom: "/api/chatRoom",
-      upload: "/api/upload"
-    },
-    note: "Most endpoints require authentication"
+  res.json({ 
+    message: "Telegram Clone API",
+    publicEndpoints: ["/api/test", "/api/health", "/api/user/login", "/api/user/register"]
   });
 });
 
-// Public test endpoint
 app.get("/api/test", (req, res) => {
-  res.json({
-    success: true,
-    message: "API is working correctly! ✅",
-    serverTime: new Date().toISOString(),
-    environment: process.env.NODE_ENV || "development"
-  });
+  res.json({ message: "API is working!", public: true });
 });
 
-// Health check endpoint
 app.get("/api/health", (req, res) => {
-  res.json({
-    status: "healthy",
-    service: "Telegram Clone API",
-    uptime: process.uptime(),
-    memory: process.memoryUsage(),
-    timestamp: new Date().toISOString()
-  });
+  res.json({ status: "healthy", public: true });
 });
 
-// Public status endpoint
-app.get("/api/public", (req, res) => {
-  res.json({
-    public: true,
-    message: "This endpoint is publicly accessible",
-    authRequired: false,
-    cookies: req.cookies ? Object.keys(req.cookies) : []
-  });
-});
-
-// Server status endpoint
-app.get("/api/status", (req, res) => {
-  res.json({
-    status: "online",
-    version: "1.0.0",
-    features: {
-      authentication: true,
-      messaging: true,
-      fileUpload: true,
-      realTime: "WebSocket support"
-    }
-  });
-});
+// Authentication routes - MUST BE PUBLIC
+app.use("/api/user", authRouter);
 
 // ========== AUTH MIDDLEWARE ==========
-// Define auth middleware FIRST
-const authMiddleware = (req, res, next) => {
-  // Skip protection for public routes
+// Create separate middleware function
+const requireAuth = (req, res, next) => {
+  console.log(`🔐 Auth check for: ${req.originalUrl}`);
+  
+  // Define ALL public routes
   const publicRoutes = [
-    "/api/test", 
-    "/api/health", 
-    "/api/public", 
-    "/api/status",
-    "/api/user/login",
-    "/api/user/register",
-    "/api/user/logout"
+    '/',
+    '/api/test',
+    '/api/health',
+    '/api/user/login',
+    '/api/user/register',
+    '/api/user/logout'
   ];
   
-  const currentRoute = req.originalUrl.split('?')[0];
+  // Check if current route starts with any public route
+  const isPublic = publicRoutes.some(route => {
+    // Exact match
+    if (req.originalUrl === route) return true;
+    // Starts with route (for nested paths like /api/user/login)
+    if (req.originalUrl.startsWith(route)) return true;
+    return false;
+  });
   
-  // Check if current route is in publicRoutes
-  const isPublicRoute = publicRoutes.some(route => currentRoute.startsWith(route));
+  console.log(`📝 Is public route? ${isPublic}`);
+  console.log(`📝 User ID cookie: ${req.cookies.userId ? 'Present' : 'Missing'}`);
   
-  if (isPublicRoute) {
+  if (isPublic) {
+    console.log('✅ Skipping auth for public route');
     return next();
   }
   
   if (!req.cookies.userId) {
+    console.log('❌ Auth failed - no userId cookie');
     return next(new ReqError(401, "Authentication required. Please log in."));
   }
+  
+  console.log('✅ Auth passed');
   next();
 };
 
-// ========== YOUR EXISTING ROUTES ==========
-// Auth routes (public) - should come BEFORE auth middleware
-app.use("/api/user", authRouter);
+// Apply auth middleware to all routes
+app.use(requireAuth);
 
-// Apply auth middleware to everything else
-app.use(authMiddleware);
-
-// Protected routes (require authentication)
+// ========== PROTECTED ROUTES ==========
 app.use("/api/contacts", contactsRouter);
 app.use("/api/profile", profileRouter);
 app.use("/api/chatRoom", chatRoomRouter);
 app.use("/api/upload", uploadRouter);
 
-// Error handle middleware
+// ========== ERROR HANDLER ==========
 app.use(errorController);
 
 module.exports = app;
